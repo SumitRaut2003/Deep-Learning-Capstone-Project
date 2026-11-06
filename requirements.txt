@@ -1,0 +1,5 @@
+flask
+ultralytics
+onnxruntime
+opencv-python
+numpy

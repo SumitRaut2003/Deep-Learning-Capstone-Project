@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helmet Compliance Monitor</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --text:#14181f; --muted:#5d6675; --line:#e1e5eb;
+    --ok:#18a058; --bad:#e03131; --idle:#6b7280; --accent:#2563eb; --accent-text:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1319; --card:#171c24; --text:#e8ecf2; --muted:#9aa4b2; --line:#262d38;
+      --ok:#2fbf71; --bad:#ff5c5c; --idle:#7b8494; --accent:#5b8def; --accent-text:#0b1020;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{font-size:18px;margin:0;font-weight:650}
+  .badge{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;padding:18px 22px;max-width:1280px;margin:0 auto}
+  @media (max-width:920px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .banner{border-radius:10px;padding:14px 16px;font-size:20px;font-weight:700;letter-spacing:.2px;color:#fff;margin-bottom:12px;text-align:center}
+  .banner.ok{background:var(--ok)} .banner.bad{background:var(--bad)} .banner.idle{background:var(--idle)}
+  .wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;border:3px solid transparent}
+  .wrap canvas{display:block;width:100%;height:auto;background:#000}
+  .wrap.alarm{animation:pulse .8s infinite}
+  @keyframes pulse{0%,100%{border-color:var(--bad)}50%{border-color:transparent}}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+  button,select,.filebtn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer}
+  button.primary{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:600}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .filebtn input{display:none}
+  label.chk{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--muted)}
+  aside{display:flex;flex-direction:column;gap:14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px;font-weight:650}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;color:var(--muted)}
+  .row{margin-bottom:12px}
+  .row .top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+  .row .top output{color:var(--muted);font-variant-numeric:tabular-nums}
+  .row small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  ul.log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:300px;overflow:auto}
+  ul.log li{display:flex;gap:10px;align-items:center;font-size:13px}
+  ul.log img{width:64px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:#000}
+  ul.log .when{font-weight:600} ul.log .sub{color:var(--muted);font-size:12px}
+  .empty{color:var(--muted);font-size:13px}
+  a.link{font-size:12.5px;color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Helmet Compliance Monitor</h1>
+  <span class="badge" id="modelBadge">Connecting to model...</span>
+</header>
+
+<main>
+  <section class="card">
+    <div id="banner" class="banner idle">Camera off</div>
+    <div id="wrap" class="wrap"><canvas id="view" width="640" height="480"></canvas></div>
+    <div class="controls">
+      <select id="cam" title="Camera"><option value="">Default camera</option></select>
+      <button id="startBtn" class="primary">Start camera</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <label class="filebtn">Test an image<input type="file" id="file" accept="image/*"></label>
+      <label class="chk"><input type="checkbox" id="mute"> Mute alarm</label>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h2>Live stats</h2>
+      <div class="stats">
+        <div class="stat"><b id="sPeople">0</b><span>Heads detected</span></div>
+        <div class="stat"><b id="sHelmet">0</b><span>With helmet</span></div>
+        <div class="stat"><b id="sNo">0</b><span>No helmet</span></div>
+        <div class="stat"><b id="sViol">0</b><span>Alarms this session</span></div>
+        <div class="stat"><b id="sFps">0.0</b><span>FPS</span></div>
+        <div class="stat"><b id="sRtt">-</b><span>End-to-end latency</span></div>
+        <div class="stat"><b id="sModel">-</b><span>Model inference</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="row">
+        <div class="top"><span>Helmet acceptance confidence</span><output id="chVal"></output></div>
+        <input type="range" id="ch" min="0.3" max="0.95" step="0.05" value="0.6">
+        <small>Higher = stricter. Raise it if bare heads are accepted as helmets.</small>
+      </div>
+      <div class="row">
+        <div class="top"><span>No-helmet sensitivity</span><output id="cnVal"></output></div>
+        <input type="range" id="cn" min="0.1" max="0.8" step="0.05" value="0.3">
+        <small>Lower = flags violations more readily.</small>
+      </div>
+      <div class="row">
+        <div class="top"><span>Frames before alarm</span><output id="streakVal"></output></div>
+        <input type="range" id="streak" min="1" max="10" step="1" value="3">
+        <small>Filters single-frame false alarms.</small>
+      </div>
+      <div class="row" style="margin-bottom:0">
+        <div class="top"><span>Alarm cooldown (s)</span><output id="cooldownVal"></output></div>
+        <input type="range" id="cooldown" min="1" max="10" step="1" value="3">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Violation log</h2>
+      <ul class="log" id="log"><li class="empty">No violations yet.</li></ul>
+      <p style="margin:10px 0 0"><a class="link" href="/api/violations.csv">Download CSV</a></p>
+    </div>
+  </aside>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const view = $('view'), ctx = view.getContext('2d');
+  const video = document.createElement('video'); video.playsInline = true; video.muted = true;
+  const grab = document.createElement('canvas'), gctx = grab.getContext('2d');
+  let stream = null, running = false, last = null, streak = 0, lastAlert = 0;
+  let sessionViolations = 0, fps = 0, audioCtx = null;
+
+  // ---------- settings readouts ----------
+  ['ch', 'cn', 'streak', 'cooldown'].forEach(id => {
+    const el = $(id), out = $(id + 'Val');
+    const upd = () => { out.textContent = (+el.value).toFixed(parseFloat(el.step) < 1 ? 2 : 0); };
+    el.addEventListener('input', upd); upd();
+  });
+  const params = () => ({ ch: +$('ch').value, cn: +$('cn').value, streak: +$('streak').value, cooldown: +$('cooldown').value });
+
+  function setBanner(text, cls) { const b = $('banner'); b.textContent = text; b.className = 'banner ' + cls; }
+
+  // ---------- audio ----------
+  function audioInit() {
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function beep() {
+    if ($('mute').checked || !audioCtx) return;
+    [0, 0.22].forEach(delay => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = 'square'; o.frequency.value = 1000; g.gain.value = 0.15;
+      o.connect(g); g.connect(audioCtx.destination);
+      const t = audioCtx.currentTime + delay; o.start(t); o.stop(t + 0.16);
+    });
+  }
+
+  // ---------- drawing ----------
+  function drawBoxes(dets, W, H) {
+    const fontPx = Math.max(13, Math.round(W / 40));
+    ctx.lineWidth = Math.max(2, Math.round(W / 320));
+    ctx.font = `bold ${fontPx}px system-ui, sans-serif`;
+    for (const d of dets) {
+      const [x1, y1, x2, y2] = d.box;
+      const x = x1 * W, y = y1 * H, w = (x2 - x1) * W, h = (y2 - y1) * H;
+      const bad = d.label === 'no_helmet', col = bad ? '#e03131' : '#18a058';
+      ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h);
+      const text = (bad ? 'NO HELMET ' : 'HELMET ') + Math.round(d.conf * 100) + '%';
+      const tw = ctx.measureText(text).width + 10, th = fontPx + 8;
+      const ty = y - th < 0 ? y : y - th;
+      ctx.fillStyle = col; ctx.fillRect(x, ty, tw, th);
+      ctx.fillStyle = '#fff'; ctx.fillText(text, x + 5, ty + th - 6);
+    }
+  }
+  function applyResult(j) {
+    const c = j.counts;
+    $('sPeople').textContent = c.helmet + c.no_helmet;
+    $('sHelmet').textContent = c.helmet;
+    $('sNo').textContent = c.no_helmet;
+    if (j.status === 'violation') setBanner('ACCESS DENIED: NO HELMET', 'bad');
+    else if (j.status === 'compliant') setBanner('COMPLIANT: HELMET DETECTED', 'ok');
+    else setBanner('NO PERSON DETECTED', 'idle');
+    $('wrap').classList.toggle('alarm', j.status === 'violation');
+  }
+  function drawLoop() {
+    if (!running) return;
+    ctx.drawImage(video, 0, 0, view.width, view.height);
+    if (last) drawBoxes(last.dets, view.width, view.height);
+    requestAnimationFrame(drawLoop);
+  }
+
+  // ---------- detection loop (one request in flight at a time) ----------
+  async function detectLoop() {
+    let tPrev = performance.now();
+    while (running) {
+      gctx.drawImage(video, 0, 0, grab.width, grab.height);
+      const blob = await new Promise(r => grab.toBlob(r, 'image/jpeg', 0.75));
+      const s = params(), t0 = performance.now();
+      try {
+        const res = await fetch(`/api/detect?ch=${s.ch}&cn=${s.cn}`, { method: 'POST', body: blob });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || res.statusText);
+        if (!running) break;
+        last = j; applyResult(j);
+        const now = performance.now();
+        fps = fps ? 0.8 * fps + 0.2 * (1000 / (now - tPrev)) : 1000 / (now - tPrev); tPrev = now;
+        $('sFps').textContent = fps.toFixed(1);
+        $('sRtt').textContent = Math.round(now - t0) + ' ms';
+        $('sModel').textContent = Math.round(j.model_ms) + ' ms';
+
+        streak = j.counts.no_helmet > 0 ? streak + 1 : 0;
+        if (streak >= s.streak && now - lastAlert > s.cooldown * 1000) {
+          lastAlert = now; beep();
+          sessionViolations++; $('sViol').textContent = sessionViolations;
+          fetch(`/api/violation?n=${j.counts.no_helmet}`, { method: 'POST', body: blob }).then(loadLog).catch(() => {});
+        }
+      } catch (e) {
+        setBanner('Server error: ' + e.message, 'idle');
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+  }
+
+  // ---------- camera ----------
+  async function listCams() {
+    try {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      const sel = $('cam'), cur = sel.value; sel.innerHTML = '';
+      devs.forEach((d, i) => {
+        const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || ('Camera ' + (i + 1)); sel.appendChild(o);
+      });
+      if (cur) sel.value = cur;
+    } catch (e) {}
+  }
+  async function start() {
+    audioInit();
+    const v = { width: { ideal: 640 }, height: { ideal: 480 } };
+    if ($('cam').value) v.deviceId = { exact: $('cam').value };
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: v, audio: false }); }
+    catch (e) { setBanner('Camera error: ' + e.message, 'idle'); return; }
+    video.srcObject = stream; await video.play();
+    view.width = video.videoWidth; view.height = video.videoHeight;
+    grab.width = 640; grab.height = Math.round(640 * video.videoHeight / video.videoWidth);
+    running = true; streak = 0; last = null; fps = 0;
+    $('startBtn').disabled = true; $('stopBtn').disabled = false;
+    setBanner('Starting...', 'idle');
+    await listCams();
+    drawLoop(); detectLoop();
+  }
+  function stop() {
+    running = false;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    last = null; streak = 0;
+    $('startBtn').disabled = false; $('stopBtn').disabled = true;
+    $('wrap').classList.remove('alarm');
+    setBanner('Camera off', 'idle');
+  }
+  $('startBtn').onclick = start;
+  $('stopBtn').onclick = stop;
+
+  // ---------- single image test ----------
+  $('file').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    stop();
+    try {
+      const img = await createImageBitmap(f);
+      view.width = img.width; view.height = img.height; ctx.drawImage(img, 0, 0);
+      const s = params(), t0 = performance.now();
+      const res = await fetch(`/api/detect?ch=${s.ch}&cn=${s.cn}`, { method: 'POST', body: f });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || res.statusText);
+      drawBoxes(j.dets, view.width, view.height); applyResult(j);
+      $('sRtt').textContent = Math.round(performance.now() - t0) + ' ms';
+      $('sModel').textContent = Math.round(j.model_ms) + ' ms';
+    } catch (err) { setBanner('Could not analyse image: ' + err.message, 'idle'); }
+  };
+
+  // ---------- violation log ----------
+  async function loadLog() {
+    try {
+      const list = await (await fetch('/api/violations')).json();
+      const ul = $('log'); ul.innerHTML = '';
+      if (!list.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'No violations yet.'; ul.appendChild(li); return; }
+      list.forEach(v => {
+        const li = document.createElement('li');
+        const img = document.createElement('img'); img.src = '/snapshots/' + encodeURIComponent(v.snapshot); img.alt = 'snapshot';
+        const box = document.createElement('div');
+        const w = document.createElement('div'); w.className = 'when'; w.textContent = v.time.replace('T', ' ');
+        const sub = document.createElement('div'); sub.className = 'sub'; sub.textContent = v.count + ' without helmet';
+        box.append(w, sub); li.append(img, box); ul.appendChild(li);
+      });
+    } catch (e) {}
+  }
+
+  // ---------- init ----------
+  fetch('/api/health').then(r => r.json())
+    .then(h => { $('modelBadge').textContent = 'Model: ' + h.model + ' | ' + h.imgsz + ' px'; })
+    .catch(() => { $('modelBadge').textContent = 'Model not reachable'; });
+  loadLog(); listCams();
+  window.addEventListener('beforeunload', stop);
+})();
+</script>
+</body>
+</html>
